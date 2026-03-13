@@ -22,6 +22,7 @@
 #include <string.h>
 #include <protocol/nmea.h>
 #include <stream_stats.h>
+#include <freertos/semphr.h>
 
 #include "uart.h"
 #include "config.h"
@@ -52,6 +53,38 @@ static int uart_port = -1;
 static bool uart_log_forward = false;
 
 static stream_stats_handle_t stream_stats;
+
+// Console ring buffer: captures all received UART bytes for the web serial console.
+// Sized at 4 KB — oldest bytes are silently dropped when full.
+#define CONSOLE_BUF_SIZE 4096
+static uint8_t console_buf[CONSOLE_BUF_SIZE];
+static size_t console_head = 0;  // write position
+static size_t console_tail = 0;  // read position
+static SemaphoreHandle_t console_mutex;
+
+static void console_push(const uint8_t *data, size_t len) {
+    xSemaphoreTake(console_mutex, portMAX_DELAY);
+    for (size_t i = 0; i < len; i++) {
+        console_buf[console_head] = data[i];
+        console_head = (console_head + 1) % CONSOLE_BUF_SIZE;
+        if (console_head == console_tail) {
+            // Buffer full: advance tail to drop the oldest byte
+            console_tail = (console_tail + 1) % CONSOLE_BUF_SIZE;
+        }
+    }
+    xSemaphoreGive(console_mutex);
+}
+
+size_t uart_console_recv(char *buf, size_t max_len) {
+    xSemaphoreTake(console_mutex, portMAX_DELAY);
+    size_t count = 0;
+    while (console_tail != console_head && count < max_len) {
+        buf[count++] = (char)console_buf[console_tail];
+        console_tail = (console_tail + 1) % CONSOLE_BUF_SIZE;
+    }
+    xSemaphoreGive(console_mutex);
+    return count;
+}
 
 static void uart_task(void *ctx);
 
@@ -92,6 +125,8 @@ void uart_init() {
 
     stream_stats = stream_stats_new("uart");
 
+    console_mutex = xSemaphoreCreateMutex();
+
     xTaskCreate(uart_task, "uart_task", 8192, NULL, TASK_PRIORITY_UART, NULL);
 }
 
@@ -106,10 +141,9 @@ static void uart_task(void *ctx) {
             continue;
         }
 
-        ESP_LOGI(TAG, "Received %d bytes (hex): %02x %02x %02x %02x %02x %02x %02x %02x | txt: %.*s",
-                 len, buffer[0], buffer[1], buffer[2], buffer[3],
-                 buffer[4], buffer[5], buffer[6], buffer[7],
-                 (len > 100 ? 100 : (int)len), buffer);
+        // Feed the web serial console ring buffer before posting the event
+        console_push(buffer, len);
+
         stream_stats_increment(stream_stats, len, 0);
 
         esp_event_post(UART_EVENT_READ, len, &buffer, len, portMAX_DELAY);
