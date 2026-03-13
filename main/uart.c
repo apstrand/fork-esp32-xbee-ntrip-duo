@@ -106,6 +106,10 @@ static void uart_task(void *ctx) {
             continue;
         }
 
+        ESP_LOGI(TAG, "Received %d bytes (hex): %02x %02x %02x %02x %02x %02x %02x %02x | txt: %.*s",
+                 len, buffer[0], buffer[1], buffer[2], buffer[3],
+                 buffer[4], buffer[5], buffer[6], buffer[7],
+                 (len > 100 ? 100 : (int)len), buffer);
         stream_stats_increment(stream_stats, len, 0);
 
         esp_event_post(UART_EVENT_READ, len, &buffer, len, portMAX_DELAY);
