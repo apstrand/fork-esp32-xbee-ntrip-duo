@@ -35,6 +35,8 @@
 #include <lwip/sockets.h>
 #include <esp_timer.h>
 #include "web_server.h"
+#include "uart.h"
+#include "um980_config.h"
 
 // Max length a file path can have on storage
 #define FILE_PATH_MAX (ESP_VFS_PATH_MAX + CONFIG_SPIFFS_OBJ_NAME_LEN)
@@ -732,6 +734,127 @@ static esp_err_t wifi_scan_get_handler(httpd_req_t *req) {
     return json_response(req, root);
 }
 
+// ---------- UART serial console --------------------------------------------------
+
+// POST /uart/send  — body is sent verbatim to the UART
+static esp_err_t uart_send_handler(httpd_req_t *req) {
+    if (check_auth(req) == ESP_FAIL) return ESP_FAIL;
+
+    int len = httpd_req_recv(req, buffer, BUFFER_SIZE - 1);
+    if (len <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty body");
+        return ESP_FAIL;
+    }
+
+    uart_write(buffer, len);
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"success\":true}");
+    return ESP_OK;
+}
+
+// GET /uart/recv  — returns all bytes buffered since the last call (text/plain)
+static esp_err_t uart_recv_handler(httpd_req_t *req) {
+    if (check_auth(req) == ESP_FAIL) return ESP_FAIL;
+
+    size_t len = uart_console_recv(buffer, BUFFER_SIZE - 1);
+    httpd_resp_set_type(req, "text/plain");
+    httpd_resp_send(req, buffer, (ssize_t)len);
+    return ESP_OK;
+}
+
+// ---------- UM980 base station configuration ------------------------------------
+
+// POST /um980/configure  — delegates to um980_config.c for the command sequence
+static esp_err_t um980_configure_handler(httpd_req_t *req) {
+    if (check_auth(req) == ESP_FAIL) return ESP_FAIL;
+
+    um980_configure_base_station();
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"success\":true}");
+    return ESP_OK;
+}
+
+// ---------- Raw RTCM3 streaming for NOAA OPUS ----------------------------------
+
+// GET /rtcm/record  — streams raw RTCM3 binary data as a chunked HTTP download.
+//
+// The client (browser, curl, etc.) keeps the connection open and receives all
+// RTCM3 bytes coming from the UART in real time. Use this to capture a session
+// long enough for NOAA OPUS (minimum ~15 min, recommended 2–4 h):
+//
+//   curl -o session.rtcm3 http://<device>/rtcm/record
+//
+// Then convert to RINEX with RTKLIB's convbin and upload to OPUS:
+//
+//   convbin -r rtcm3 -o session.obs session.rtcm3
+//
+// Only one recording session is allowed at a time.
+
+#define RTCM_QUEUE_DEPTH  16
+#define RTCM_CHUNK_MAX    512
+
+typedef struct {
+    uint8_t data[RTCM_CHUNK_MAX];
+    size_t  len;
+} rtcm_chunk_t;
+
+static QueueHandle_t rtcm_queue = NULL;
+
+static void rtcm_record_uart_handler(void *args, esp_event_base_t base, int32_t length, void *buf) {
+    if (!rtcm_queue) return;
+    // Split into RTCM_CHUNK_MAX-sized pieces in case the UART burst is larger
+    size_t offset = 0;
+    while (offset < (size_t)length) {
+        rtcm_chunk_t chunk;
+        chunk.len = MIN((size_t)length - offset, RTCM_CHUNK_MAX);
+        memcpy(chunk.data, (uint8_t *)buf + offset, chunk.len);
+        offset += chunk.len;
+        if (xQueueSend(rtcm_queue, &chunk, 0) != pdTRUE) break; // drop if queue full
+    }
+}
+
+static esp_err_t rtcm_record_handler(httpd_req_t *req) {
+    if (check_auth(req) == ESP_FAIL) return ESP_FAIL;
+
+    if (rtcm_queue != NULL) {
+        // Another download is already streaming; only one session at a time
+        httpd_resp_set_status(req, "409 Conflict");
+        httpd_resp_set_type(req, "text/plain");
+        httpd_resp_sendstr(req, "Recording already in progress");
+        return ESP_FAIL;
+    }
+
+    rtcm_queue = xQueueCreate(RTCM_QUEUE_DEPTH, sizeof(rtcm_chunk_t));
+    if (!rtcm_queue) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
+        return ESP_FAIL;
+    }
+
+    uart_register_read_handler(rtcm_record_uart_handler);
+
+    httpd_resp_set_type(req, "application/octet-stream");
+    httpd_resp_set_hdr(req, "Content-Disposition", "attachment; filename=\"rtcm3.bin\"");
+
+    rtcm_chunk_t chunk;
+    // Block until client disconnects (send_chunk returns error) or 60 s of silence
+    while (xQueueReceive(rtcm_queue, &chunk, pdMS_TO_TICKS(60000)) == pdTRUE) {
+        if (httpd_resp_send_chunk(req, (char *)chunk.data, chunk.len) != ESP_OK) {
+            break; // client disconnected
+        }
+    }
+
+    uart_unregister_read_handler(rtcm_record_uart_handler);
+    vQueueDelete(rtcm_queue);
+    rtcm_queue = NULL;
+
+    httpd_resp_send_chunk(req, NULL, 0); // end chunked transfer
+    return ESP_OK;
+}
+
+// -------------------------------------------------------------------------------
+
 static esp_err_t register_uri_handler(httpd_handle_t server, const char *path, httpd_method_t method, esp_err_t (*handler)(httpd_req_t *r)) {
     httpd_uri_t uri_config_get = {
             .uri        = path,
@@ -756,6 +879,7 @@ static httpd_handle_t web_server_start(void)
     httpd_handle_t server = NULL;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;
+    config.max_uri_handlers = 16; // default is 8; we register more than that
 
     // Start the httpd server
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
@@ -769,6 +893,11 @@ static httpd_handle_t web_server_start(void)
         register_uri_handler(server, "/heap_info", HTTP_GET, heap_info_get_handler);
 
         register_uri_handler(server, "/wifi/scan", HTTP_GET, wifi_scan_get_handler);
+
+        register_uri_handler(server, "/uart/send",       HTTP_POST, uart_send_handler);
+        register_uri_handler(server, "/uart/recv",       HTTP_GET,  uart_recv_handler);
+        register_uri_handler(server, "/um980/configure", HTTP_POST, um980_configure_handler);
+        register_uri_handler(server, "/rtcm/record",     HTTP_GET,  rtcm_record_handler);
 
         register_uri_handler(server, "/*", HTTP_GET, file_get_handler);
     }

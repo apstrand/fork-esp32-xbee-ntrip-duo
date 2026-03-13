@@ -82,6 +82,10 @@ void app_main()
     config_init();
     uart_init();
 
+    // UM980 base station configuration is done on demand via the web UI
+    // (POST /um980/configure), not at every boot. This avoids re-triggering a
+    // position survey on each reset; the UM980 retains its settings via SAVECONFIG.
+
     esp_reset_reason_t reset_reason = esp_reset_reason();
 
     const esp_app_desc_t *app_desc = esp_ota_get_app_description();
