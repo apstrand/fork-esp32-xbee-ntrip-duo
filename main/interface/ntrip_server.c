@@ -120,10 +120,11 @@ static void ntrip_server_task(void *ctx) {
 
         char *buffer = NULL;
 
-        char *host, *mountpoint, *password;
+        char *host, *mountpoint, *username, *password;
         uint16_t port = config_get_u16(CONF_ITEM(KEY_CONFIG_NTRIP_SERVER_PORT));
         config_get_primitive(CONF_ITEM(KEY_CONFIG_NTRIP_SERVER_PORT), &port);
         config_get_str_blob_alloc(CONF_ITEM(KEY_CONFIG_NTRIP_SERVER_HOST), (void **) &host);
+        config_get_str_blob_alloc(CONF_ITEM(KEY_CONFIG_NTRIP_SERVER_USERNAME), (void **) &username);
         config_get_str_blob_alloc(CONF_ITEM(KEY_CONFIG_NTRIP_SERVER_PASSWORD), (void **) &password);
         config_get_str_blob_alloc(CONF_ITEM(KEY_CONFIG_NTRIP_SERVER_MOUNTPOINT), (void **) &mountpoint);
 
@@ -135,9 +136,18 @@ static void ntrip_server_task(void *ctx) {
 
         buffer = malloc(BUFFER_SIZE);
 
-        snprintf(buffer, BUFFER_SIZE, "SOURCE %s /%s" NEWLINE \
-                "Source-Agent: NTRIP %s/%s" NEWLINE \
-                NEWLINE, password, mountpoint, NTRIP_SERVER_NAME, &esp_ota_get_app_description()->version[1]);
+        char *auth = http_auth_basic_header(username, password);
+        snprintf(buffer, BUFFER_SIZE,
+                "POST /%s HTTP/1.1" NEWLINE
+                "Host: %s:%d" NEWLINE
+                "Ntrip-Version: Ntrip/2.0" NEWLINE
+                "User-Agent: NTRIP %s/%s" NEWLINE
+                "Authorization: %s" NEWLINE
+                "Content-Type: application/octet-stream" NEWLINE
+                "Transfer-Encoding: chunked" NEWLINE
+                NEWLINE,
+                mountpoint, host, port, NTRIP_SERVER_NAME, &esp_ota_get_app_description()->version[1], auth);
+        free(auth);
 
         int err = write(sock, buffer, strlen(buffer));
         ERROR_ACTION(TAG, err < 0, goto _error, "Could not send request to caster: %d %s", errno, strerror(errno));
@@ -179,6 +189,7 @@ static void ntrip_server_task(void *ctx) {
 
         free(buffer);
         free(host);
+        free(username);
         free(mountpoint);
         free(password);
     }
