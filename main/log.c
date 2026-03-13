@@ -20,6 +20,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/ringbuf.h>
 #include <string.h>
+#include <stdio.h>
 #include <uart.h>
 #include "log.h"
 
@@ -49,6 +50,9 @@ int log_vprintf(const char * format, va_list arg) {
     if (n > 512) {
         n = 512;
     }
+
+    // Mirror all log output to UART0 (USB console) for debugging
+    fwrite(buffer, 1, n, stdout);
 
     // Remove log colors for web log buffer
     xRingbufferSend(ringbuf_handle, buffer + strlen(LOG_COLOR_E),
