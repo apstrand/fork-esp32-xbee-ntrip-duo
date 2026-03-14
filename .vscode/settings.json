@@ -1,0 +1,9 @@
+{
+  "idf.espIdfPath": "/Users/peter/esp/v5.5/esp-idf",
+  "idf.toolsPath": "/Users/peter/.espressif",
+  "idf.pythonInstallPath": "/opt/homebrew/opt/python@3.13/Frameworks/Python.framework/Versions/3.13/bin/python3",
+  "idf.openOcdConfigs": [
+    "board/esp32-wrover-kit-3.3v.cfg"
+  ],
+  "idf.currentSetup": "/Users/peter/esp/v5.5/esp-idf"
+}
