@@ -22,7 +22,6 @@
 #include <sys/param.h>
 #include <esp_vfs.h>
 #include <esp_spiffs.h>
-#include <lwip/apps/mdns.h>
 #include <config.h>
 #include <log.h>
 #include <core_dump.h>

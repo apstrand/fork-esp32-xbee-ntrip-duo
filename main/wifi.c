@@ -19,7 +19,7 @@
 #include <esp_wifi.h>
 #include <esp_log.h>
 #include <string.h>
-#include <lwip/apps/mdns.h>
+#include <mdns.h>
 #include <math.h>
 #include <driver/gpio.h>
 #include <sys/param.h>
@@ -442,6 +442,41 @@ void wifi_init() {
     }
 
     ESP_ERROR_CHECK(esp_wifi_start());
+
+    // mDNS: advertise the device as <hostname>.local on the LAN.
+    // Hostname comes from the mdns_name config key; if empty, the AP SSID is
+    // used (already set above) converted to lowercase as a reasonable default.
+    char *mdns_name = NULL;
+    config_get_str_blob_alloc(CONF_ITEM(KEY_CONFIG_MDNS_NAME), (void **) &mdns_name);
+
+    char hostname[64];
+    if (mdns_name != NULL && strlen(mdns_name) > 0) {
+        // Sanitise: replace spaces with hyphens, lowercase
+        snprintf(hostname, sizeof(hostname), "%s", mdns_name);
+        for (char *p = hostname; *p; p++) {
+            if (*p == ' ') *p = '-';
+            else if (*p >= 'A' && *p <= 'Z') *p = *p + ('a' - 'A');
+        }
+    } else {
+        // Fall back to the AP SSID in lowercase
+        snprintf(hostname, sizeof(hostname), "%s", (char *)config_ap.ap.ssid);
+        for (char *p = hostname; *p; p++) {
+            if (*p == ' ') *p = '-';
+            else if (*p >= 'A' && *p <= 'Z') *p = *p + ('a' - 'A');
+        }
+    }
+    free(mdns_name);
+
+    esp_err_t mdns_err = mdns_init();
+    if (mdns_err == ESP_OK) {
+        mdns_hostname_set(hostname);
+        mdns_instance_name_set("ESP32 NTRIP");
+        // Advertise the web UI via HTTP service discovery (_http._tcp)
+        mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0);
+        ESP_LOGI(TAG, "mDNS started: %s.local", hostname);
+    } else {
+        ESP_LOGW(TAG, "mDNS init failed: %s", esp_err_to_name(mdns_err));
+    }
 }
 
 wifi_sta_list_t *wifi_ap_sta_list() {

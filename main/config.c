@@ -48,6 +48,12 @@ const config_item_t CONFIG_ITEMS[] = {
                 .type = CONFIG_ITEM_TYPE_STRING,
                 .secret = true,
                 .def.str = ""
+        }, {
+                // mDNS hostname — device is reachable as <name>.local on the LAN.
+                // Default empty: falls back to the WiFi AP SSID in lowercase.
+                .key = KEY_CONFIG_MDNS_NAME,
+                .type = CONFIG_ITEM_TYPE_STRING,
+                .def.str = ""
         },
 
         // Bluetooth

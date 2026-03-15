@@ -480,6 +480,22 @@
             <div class="row mb-1">
                 <div class="col-xl-6">
                     <div class="card mb-3">
+                        <div class="card-header">Network identity</div>
+                        <div class="card-body">
+                            <div class="form-row">
+                                <div class="col">
+                                    <label>mDNS hostname <small class="text-muted" data-toggle="tooltip" title="The device will be reachable as &lt;hostname&gt;.local on the local network (no IP address needed). Leave empty to use the WiFi hotspot SSID in lowercase as the hostname.">?</small></label>
+                                    <div class="input-group">
+                                        <input type="text" name="mdns_name" class="form-control" maxlength="63" placeholder="(uses AP SSID if empty)">
+                                        <div class="input-group-append">
+                                            <span class="input-group-text">.local</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card mb-3">
                         <div class="card-header">
                             WiFi
                             <small class="wifi-sta-status"></small>

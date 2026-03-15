@@ -62,6 +62,7 @@ typedef struct config_item {
 #define KEY_CONFIG_ADMIN_AUTH "adm_auth"
 #define KEY_CONFIG_ADMIN_USERNAME "adm_user"
 #define KEY_CONFIG_ADMIN_PASSWORD "adm_pass"
+#define KEY_CONFIG_MDNS_NAME "mdns_name"
 
 // Bluetooth
 #define KEY_CONFIG_BLUETOOTH_ACTIVE "bt_active"
