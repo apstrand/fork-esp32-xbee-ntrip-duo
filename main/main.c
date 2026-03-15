@@ -22,6 +22,7 @@
 #include <esp_sntp.h>
 #include <core_dump.h>
 #include <esp_ota_ops.h>
+#include <esp_app_desc.h>
 #include <stream_stats.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -88,9 +89,9 @@ void app_main()
 
     esp_reset_reason_t reset_reason = esp_reset_reason();
 
-    const esp_app_desc_t *app_desc = esp_ota_get_app_description();
+    const esp_app_desc_t *app_desc = esp_app_get_description();
     char elf_buffer[17];
-    esp_ota_get_app_elf_sha256(elf_buffer, sizeof(elf_buffer));
+    esp_app_get_elf_sha256(elf_buffer, sizeof(elf_buffer));
 
     uart_nmea("$PESP,INIT,START,%s,%s", app_desc->version, reset_reason_name(reset_reason));
 
@@ -141,11 +142,11 @@ void app_main()
 
     wait_for_ip();
 
-    sntp_setoperatingmode(SNTP_OPMODE_POLL);
-    sntp_setservername(0, "pool.ntp.org");
+    esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    esp_sntp_setservername(0, "pool.ntp.org");
     sntp_set_sync_mode(SNTP_SYNC_MODE_SMOOTH);
     sntp_set_time_sync_notification_cb(sntp_time_set_handler);
-    sntp_init();
+    esp_sntp_init();
 
 #ifdef DEBUG_HEAP
     while (true) {

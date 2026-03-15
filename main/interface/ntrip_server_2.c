@@ -26,6 +26,7 @@
 #include <stream_stats.h>
 #include <freertos/event_groups.h>
 #include <esp_ota_ops.h>
+#include <esp_app_desc.h>
 #include "interface/ntrip.h"
 #include "config.h"
 #include "util.h"
@@ -146,7 +147,7 @@ static void ntrip_server_task(void *ctx) {
                 "Content-Type: application/octet-stream" NEWLINE
                 "Transfer-Encoding: chunked" NEWLINE
                 NEWLINE,
-                mountpoint, host, port, NTRIP_SERVER_NAME, &esp_ota_get_app_description()->version[1], auth);
+                mountpoint, host, port, NTRIP_SERVER_NAME, &esp_app_get_description()->version[1], auth);
         free(auth);
 
         int err = write(sock, buffer, strlen(buffer));
