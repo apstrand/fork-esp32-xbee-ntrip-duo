@@ -1,1 +1,26 @@
 # put here your custom config value
+
+menu "OLED Display"
+
+    config OLED_ENABLED
+        bool "Enable 128x32 I2C OLED status display"
+        default n
+        help
+            Enables the SSD1306-based 128x32 OLED connected via I2C.
+            Shows WiFi status, NTRIP rates, uptime and free heap.
+
+    config OLED_SDA_PIN
+        int "SDA GPIO number"
+        depends on OLED_ENABLED
+        default 4
+        help
+            GPIO for I2C SDA.  GPIO 4 is free on the standard ESP32 board.
+
+    config OLED_SCL_PIN
+        int "SCL GPIO number"
+        depends on OLED_ENABLED
+        default 5
+        help
+            GPIO for I2C SCL.  GPIO 5 is free on the standard ESP32 board.
+
+endmenu

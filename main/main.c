@@ -18,6 +18,7 @@
 #include <web_server.h>
 #include <log.h>
 #include <status_led.h>
+#include <display.h>
 
 #include <esp_sntp.h>
 #include <core_dump.h>
@@ -135,6 +136,8 @@ void app_main()
 
     ntrip_server_init();
     ntrip_server_2_init();
+
+    display_init();
 
 
 
