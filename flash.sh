@@ -66,8 +66,11 @@ done
 cd "$SCRIPT_DIR"
 
 # ── source ESP-IDF if not already active ─────────────────────────────────────
-if ! command -v idf.py &>/dev/null; then
+# IDF 6.0 uses a shell alias for idf.py rather than a PATH entry, so check
+# IDF_PATH instead of command -v idf.py to detect an active environment.
+if [[ -z "${IDF_PATH:-}" ]]; then
     IDF_CANDIDATES=(
+        "$HOME/.espressif/tools/activate_idf_v6.0.sh"
         "$HOME/esp/esp-idf/export.sh"
         "$HOME/.espressif/esp-idf/export.sh"
         "/opt/esp-idf/export.sh"
@@ -84,11 +87,26 @@ if ! command -v idf.py &>/dev/null; then
         fi
     done
     if [[ $SOURCED -eq 0 ]]; then
-        echo "ERROR: idf.py not found on PATH and no ESP-IDF install detected."
-        echo "       Run '. \$IDF_PATH/export.sh' before calling this script, or"
-        echo "       install ESP-IDF in one of the standard locations."
+        echo "ERROR: ESP-IDF not found. Run '. \$IDF_PATH/export.sh' or"
+        echo "       '. ~/.espressif/tools/activate_idf_v6.0.sh' before calling this script."
         exit 1
     fi
+fi
+
+# ── resolve idf.py invocation ─────────────────────────────────────────────────
+# IDF 6.0: idf.py is a shell alias, not on PATH — invoke via Python directly.
+# IDF 5.x: idf.py is a real command on PATH — use it directly.
+if command -v idf.py &>/dev/null; then
+    IDF_PY=(idf.py)
+elif [[ -n "${IDF_PATH:-}" && -f "$IDF_PATH/tools/idf.py" ]]; then
+    if [[ -n "${IDF_PYTHON_ENV_PATH:-}" && -x "$IDF_PYTHON_ENV_PATH/bin/python" ]]; then
+        IDF_PY=("$IDF_PYTHON_ENV_PATH/bin/python" "$IDF_PATH/tools/idf.py")
+    else
+        IDF_PY=(python "$IDF_PATH/tools/idf.py")
+    fi
+else
+    echo "ERROR: idf.py not found. Ensure ESP-IDF is properly installed and sourced."
+    exit 1
 fi
 
 # ── resolve target ───────────────────────────────────────────────────────────
@@ -113,7 +131,7 @@ if [[ $NO_BUILD -eq 0 ]]; then
     fi
     if [[ "$TARGET" != "$CURRENT_TARGET" ]]; then
         echo "Setting target to: $TARGET"
-        idf.py set-target "$TARGET"
+        "${IDF_PY[@]}" set-target "$TARGET"
     fi
 fi
 
@@ -121,7 +139,7 @@ fi
 if [[ $NO_BUILD -eq 0 ]]; then
     echo ""
     echo "Building for target: $TARGET"
-    idf.py build
+    "${IDF_PY[@]}" build
 fi
 
 # ── find app binary ──────────────────────────────────────────────────────────
@@ -192,10 +210,10 @@ EXTRA_IDFPY_ARGS+=(-p "$PORT" -b "$BAUD")
 
 echo ""
 echo "Flashing to $PORT at ${BAUD} baud..."
-idf.py "${EXTRA_IDFPY_ARGS[@]}" flash
+"${IDF_PY[@]}" "${EXTRA_IDFPY_ARGS[@]}" flash
 
 if [[ $MONITOR -eq 1 ]]; then
     echo ""
     echo "Starting monitor (Ctrl-] to exit)..."
-    idf.py -p "$PORT" monitor
+    "${IDF_PY[@]}" -p "$PORT" monitor
 fi
