@@ -159,6 +159,20 @@
 
             form.find(":input").on('change', checkDisableIfs);
 
+            $('#btn-um980-configure').on('click', function() {
+                const btn = $(this);
+                if (!confirm("Send base station configuration sequence to UM980?\n\nThis will restart the position survey.")) return;
+                btn.prop('disabled', true).text('Configuring…');
+                $.post('/um980/configure')
+                    .done(function() { btn.text('Done').removeClass('btn-warning').addClass('btn-success'); })
+                    .fail(function() { btn.text('Failed').removeClass('btn-warning').addClass('btn-danger'); })
+                    .always(function() {
+                        setTimeout(function() {
+                            btn.prop('disabled', false).text('Configure UM980').removeClass('btn-success btn-danger').addClass('btn-warning');
+                        }, 3000);
+                    });
+            });
+
             $('#switch-uart').on('click', function() {
                 if (confirm("WARNING\n\nThese settings are mainly for development purposes and do not normally have to be changed. With a standard ESP32 XBee device the only setting you may want to change is the UART baud rate. DO NOT PROCEED unless you know what you are doing.")) {
                     $(this).hide();
@@ -827,6 +841,7 @@
                             UART (main communication)
                             <small class="uart-stats stream-stats" data-stream="uart"></small>
                             <div class="d-inline float-right">
+                                <button id="btn-um980-configure" class="btn btn-sm btn-warning mr-2">Configure UM980</button>
                                 <a href="javascript:void(0)" id="switch-uart">Configure</a>
                             </div>
                         </div>
