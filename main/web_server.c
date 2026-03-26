@@ -853,6 +853,82 @@ static esp_err_t rtcm_record_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
+// ---------- OTA firmware update -----------------------------------------------
+
+static void ota_restart_callback(void *arg) {
+    esp_restart();
+}
+
+static esp_err_t ota_update_handler(httpd_req_t *req) {
+    if (check_auth(req) == ESP_FAIL) return ESP_FAIL;
+
+    const esp_partition_t *update_partition = esp_ota_get_next_update_partition(NULL);
+    if (update_partition == NULL) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No OTA partition found");
+        return ESP_FAIL;
+    }
+
+    esp_ota_handle_t ota_handle;
+    esp_err_t err = esp_ota_begin(update_partition, OTA_WITH_SEQUENTIAL_WRITES, &ota_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_ota_begin failed: %s", esp_err_to_name(err));
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA begin failed");
+        return ESP_FAIL;
+    }
+
+    int remaining = req->content_len;
+    ESP_LOGI(TAG, "OTA update started, firmware size: %d bytes", remaining);
+
+    while (remaining > 0) {
+        int received = httpd_req_recv(req, buffer, MIN(remaining, BUFFER_SIZE));
+        if (received == HTTPD_SOCK_ERR_TIMEOUT) continue;
+        if (received <= 0) {
+            ESP_LOGE(TAG, "OTA receive error: %d", received);
+            esp_ota_abort(ota_handle);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA receive failed");
+            return ESP_FAIL;
+        }
+
+        err = esp_ota_write(ota_handle, buffer, received);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "esp_ota_write failed: %s", esp_err_to_name(err));
+            esp_ota_abort(ota_handle);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA write failed");
+            return ESP_FAIL;
+        }
+
+        remaining -= received;
+    }
+
+    err = esp_ota_end(ota_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_ota_end failed: %s", esp_err_to_name(err));
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA validation failed");
+        return ESP_FAIL;
+    }
+
+    err = esp_ota_set_boot_partition(update_partition);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_ota_set_boot_partition failed: %s", esp_err_to_name(err));
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA set boot partition failed");
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "OTA update complete, rebooting in 1s");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"success\":true,\"message\":\"OTA update complete, rebooting\"}");
+
+    esp_timer_handle_t restart_timer;
+    const esp_timer_create_args_t restart_timer_args = {
+        .callback = ota_restart_callback,
+        .name = "ota_restart"
+    };
+    esp_timer_create(&restart_timer_args, &restart_timer);
+    esp_timer_start_once(restart_timer, 1000000); // 1 second
+
+    return ESP_OK;
+}
+
 // -------------------------------------------------------------------------------
 
 static esp_err_t register_uri_handler(httpd_handle_t server, const char *path, httpd_method_t method, esp_err_t (*handler)(httpd_req_t *r)) {
@@ -898,6 +974,7 @@ static httpd_handle_t web_server_start(void)
         register_uri_handler(server, "/uart/recv",       HTTP_GET,  uart_recv_handler);
         register_uri_handler(server, "/um980/configure", HTTP_POST, um980_configure_handler);
         register_uri_handler(server, "/rtcm/record",     HTTP_GET,  rtcm_record_handler);
+        register_uri_handler(server, "/ota/update",      HTTP_POST, ota_update_handler);
 
         register_uri_handler(server, "/*", HTTP_GET, file_get_handler);
     }
