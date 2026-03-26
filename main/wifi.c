@@ -135,7 +135,6 @@ static void handle_sta_disconnected(void *esp_netif, esp_event_base_t base, int3
         case WIFI_REASON_AUTH_EXPIRE:
         case WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT:
         case WIFI_REASON_AUTH_FAIL:
-        case WIFI_REASON_ASSOC_EXPIRE:
         case WIFI_REASON_HANDSHAKE_TIMEOUT:
             reason = "AUTH";
             break;
@@ -401,7 +400,7 @@ void wifi_init() {
                 ffs(~ip_info_ap.netmask.addr) - 1);
 
         ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &config_ap));
-        ESP_ERROR_CHECK(esp_wifi_set_bandwidth(WIFI_IF_AP, WIFI_BW_HT20));
+        ESP_ERROR_CHECK(esp_wifi_set_bandwidth(WIFI_IF_AP, WIFI_BW20));
 
         config_color_t ap_led_color = config_get_color(CONF_ITEM(KEY_CONFIG_WIFI_AP_COLOR));
         if (ap_led_color.rgba != 0) status_led_ap = status_led_add(ap_led_color.rgba, STATUS_LED_STATIC, 500, 2000, 0);
@@ -427,7 +426,7 @@ void wifi_init() {
                 config_sta.sta.scan_method == WIFI_ALL_CHANNEL_SCAN ? 'A' : 'F');
 
         ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &config_sta));
-        ESP_ERROR_CHECK(esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW_HT20));
+        ESP_ERROR_CHECK(esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW20));
 
         // Keep track of connection for RSSI indicator, but suspend until connected
         xTaskCreate(wifi_sta_status_task, "wifi_sta_status", 2048, NULL, TASK_PRIORITY_WIFI_STATUS, &sta_status_task);

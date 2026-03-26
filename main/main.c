@@ -28,6 +28,7 @@
 #include "freertos/task.h"
 #include "esp_system.h"
 #include "esp_log.h"
+#include "driver/gpio.h"
 #include "driver/uart.h"
 #include "driver/ledc.h"
 #include "button.h"
@@ -43,7 +44,7 @@ static const char *TAG = "MAIN";
 
 static char *reset_reason_name(esp_reset_reason_t reason);
 
-static void reset_button_task() {
+static void reset_button_task(void *pvParam) {
     QueueHandle_t button_queue = button_init(PIN_BIT(GPIO_NUM_0));
     gpio_set_pull_mode(GPIO_NUM_0, GPIO_PULLUP_ONLY);
     while (true) {

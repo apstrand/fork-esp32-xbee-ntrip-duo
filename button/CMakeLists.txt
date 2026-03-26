@@ -1,6 +1,3 @@
-set(COMPONENT_SRCS "button.c")
-set(COMPONENT_ADD_INCLUDEDIRS "include")
-
-set(COMPONENT_REQUIRES driver esp_timer)
-
-register_component()
+idf_component_register(SRCS "button.c"
+    INCLUDE_DIRS "include"
+    REQUIRES esp_driver_gpio esp_timer)

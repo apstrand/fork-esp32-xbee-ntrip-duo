@@ -15,13 +15,13 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <driver/gpio.h>
 #include <driver/ledc.h>
 #include <tasks.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
-#include "xtensa_api.h"
 #include "freertos/portmacro.h"
 #include "status_led.h"
 #include <sys/queue.h>
@@ -140,7 +140,7 @@ static void status_led_show(status_led_handle_t color) {
     status_led_set(0, 0, 0);
 }
 
-static void status_led_task() {
+static void status_led_task(void *pvParam) {
     while (true) {
         // Wait for a color
         if (SLIST_EMPTY(&status_led_colors_list)) vTaskSuspend(NULL);

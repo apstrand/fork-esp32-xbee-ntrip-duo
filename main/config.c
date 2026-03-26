@@ -571,7 +571,7 @@ esp_err_t config_commit() {
     return nvs_commit(config_handle);
 }
 
-static void config_restart_task() {
+static void config_restart_task(void *pvParam) {
     vTaskDelay(pdMS_TO_TICKS(1000));
     esp_restart();
 }
