@@ -1,5 +1,17 @@
 # put here your custom config value
 
+menu "General Settings"
+
+    config DEFAULT_MDNS_NAME
+        string "Default mDNS name"
+        default "esp32-xbee"
+        help
+            The default mDNS hostname to use if none is configured in NVS.
+            The device will be reachable at <name>.local.
+            If left empty, it will fall back to the WiFi AP SSID.
+
+endmenu
+
 menu "OLED Display"
 
     config OLED_ENABLED

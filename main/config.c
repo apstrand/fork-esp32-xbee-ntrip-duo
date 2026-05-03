@@ -53,7 +53,7 @@ const config_item_t CONFIG_ITEMS[] = {
                 // Default empty: falls back to the WiFi AP SSID in lowercase.
                 .key = KEY_CONFIG_MDNS_NAME,
                 .type = CONFIG_ITEM_TYPE_STRING,
-                .def.str = ""
+                .def.str = CONFIG_DEFAULT_MDNS_NAME
         },
 
         // Bluetooth
