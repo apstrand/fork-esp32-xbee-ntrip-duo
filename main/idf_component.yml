@@ -4,3 +4,4 @@ dependencies:
   idf:
     version: ">=4.1.0"
   espressif/cjson: ">=1.7.0"
+  espressif/mdns: ">=1.0.0"
