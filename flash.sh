@@ -12,6 +12,7 @@ OTA_HOST=""
 OTA_USER=""
 OTA_PASS=""
 EXTRA_IDFPY_ARGS=()
+FLASH_WWW=0
 
 # ── usage ────────────────────────────────────────────────────────────────────
 usage() {
@@ -34,15 +35,15 @@ OTA options:
       --pass   PASS     HTTP basic auth password
 
 Common:
-      --no-build        Skip build step (use existing build/PROJECT.bin)
+      --www             Target the 'www' SPIFFS partition instead of app firmware
+      --no-build        Skip build step (use existing build/*.bin)
   -h, --help            Show this help
 
 Examples:
   ./flash.sh -t esp32s3 -p /dev/ttyUSB0
-  ./flash.sh -t esp32s3 --monitor
+  ./flash.sh --www -p /dev/ttyUSB0
   ./flash.sh --ota 192.168.4.1
-  ./flash.sh --ota 192.168.1.42 --user admin --pass secret
-  ./flash.sh --ota 192.168.4.1 --no-build
+  ./flash.sh --www --ota 192.168.4.1
 EOF
 }
 
@@ -57,6 +58,7 @@ while [[ $# -gt 0 ]]; do
         -o|--ota)      OTA_HOST="$2"; shift 2 ;;
         --user)        OTA_USER="$2"; shift 2 ;;
         --pass)        OTA_PASS="$2"; shift 2 ;;
+        --www)         FLASH_WWW=1;   shift   ;;
         --no-build)    NO_BUILD=1;    shift   ;;
         -h|--help)     usage; exit 0 ;;
         *) echo "Unknown option: $1"; usage; exit 1 ;;
@@ -142,8 +144,16 @@ if [[ $NO_BUILD -eq 0 ]]; then
     "${IDF_PY[@]}" build
 fi
 
-# ── find app binary ──────────────────────────────────────────────────────────
-find_app_bin() {
+# ── find binary ──────────────────────────────────────────────────────────────
+find_bin() {
+    if [[ $FLASH_WWW -eq 1 ]]; then
+        if [[ -f "build/www.bin" ]]; then
+            echo "build/www.bin"
+            return 0
+        fi
+        return 1
+    fi
+
     # idf.py names the binary after the project() name in CMakeLists.txt
     local project
     project=$(grep -m1 '^project(' CMakeLists.txt | sed 's/project(\(.*\))/\1/')
@@ -152,6 +162,7 @@ find_app_bin() {
         # fallback: any .bin in build/ that isn't a partition/bootloader binary
         bin=$(find build -maxdepth 1 -name '*.bin' \
               ! -name 'partition*' ! -name 'bootloader*' \
+              ! -name 'www*' \
               | head -1)
     fi
     echo "$bin"
@@ -159,23 +170,28 @@ find_app_bin() {
 
 # ── OTA path ─────────────────────────────────────────────────────────────────
 if [[ -n "$OTA_HOST" ]]; then
-    APP_BIN=$(find_app_bin)
-    if [[ -z "$APP_BIN" || ! -f "$APP_BIN" ]]; then
-        echo "ERROR: App binary not found. Run without --no-build or check build/."
+    BIN=$(find_bin)
+    if [[ -z "$BIN" || ! -f "$BIN" ]]; then
+        echo "ERROR: Binary not found. Run without --no-build or check build/."
         exit 1
     fi
 
-    OTA_URL="http://${OTA_HOST}/ota/update"
+    if [[ $FLASH_WWW -eq 1 ]]; then
+        OTA_URL="http://${OTA_HOST}/ota/www"
+    else
+        OTA_URL="http://${OTA_HOST}/ota/update"
+    fi
+
     CURL_ARGS=(-s -S --max-time 120 -w "\n%{http_code}")
     [[ -n "$OTA_USER" ]] && CURL_ARGS+=(-u "${OTA_USER}:${OTA_PASS}")
 
     echo ""
-    echo "OTA upload: $(basename "$APP_BIN") ($(du -h "$APP_BIN" | cut -f1)) → $OTA_URL"
+    echo "OTA upload: $(basename "$BIN") ($(du -h "$BIN" | cut -f1)) → $OTA_URL"
 
     RESPONSE=$(curl "${CURL_ARGS[@]}" \
         -X POST "$OTA_URL" \
         -H "Content-Type: application/octet-stream" \
-        --data-binary "@${APP_BIN}")
+        --data-binary "@${BIN}")
 
     HTTP_CODE=$(tail -1 <<< "$RESPONSE")
     BODY=$(head -1 <<< "$RESPONSE")
@@ -208,9 +224,15 @@ fi
 
 EXTRA_IDFPY_ARGS+=(-p "$PORT" -b "$BAUD")
 
-echo ""
-echo "Flashing to $PORT at ${BAUD} baud..."
-"${IDF_PY[@]}" "${EXTRA_IDFPY_ARGS[@]}" flash
+if [[ $FLASH_WWW -eq 1 ]]; then
+    echo ""
+    echo "Flashing WWW to $PORT at ${BAUD} baud..."
+    "${IDF_PY[@]}" "${EXTRA_IDFPY_ARGS[@]}" www-flash
+else
+    echo ""
+    echo "Flashing to $PORT at ${BAUD} baud..."
+    "${IDF_PY[@]}" "${EXTRA_IDFPY_ARGS[@]}" flash
+fi
 
 if [[ $MONITOR -eq 1 ]]; then
     echo ""

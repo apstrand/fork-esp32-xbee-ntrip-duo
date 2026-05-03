@@ -860,6 +860,69 @@ static void ota_restart_callback(void *arg) {
     esp_restart();
 }
 
+static esp_err_t ota_www_handler(httpd_req_t *req) {
+    if (check_auth(req) == ESP_FAIL) return ESP_FAIL;
+
+    const esp_partition_t *partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_SPIFFS, WWW_PARTITION_LABEL);
+    if (partition == NULL) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "WWW partition not found");
+        return ESP_FAIL;
+    }
+
+    if (req->content_len > partition->size) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "File too large for WWW partition");
+        return ESP_FAIL;
+    }
+
+    esp_vfs_spiffs_unregister(WWW_PARTITION_LABEL);
+
+    esp_err_t err = esp_partition_erase_range(partition, 0, partition->size);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_partition_erase_range failed: %s", esp_err_to_name(err));
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Partition erase failed");
+        www_spiffs_init();
+        return ESP_FAIL;
+    }
+
+    int remaining = req->content_len;
+    ESP_LOGI(TAG, "WWW update started, size: %d bytes", remaining);
+
+    int offset = 0;
+    while (remaining > 0) {
+        int received = httpd_req_recv(req, buffer, MIN(remaining, BUFFER_SIZE));
+        if (received == HTTPD_SOCK_ERR_TIMEOUT) continue;
+        if (received <= 0) {
+            ESP_LOGE(TAG, "WWW receive error: %d", received);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "WWW receive failed");
+            return ESP_FAIL;
+        }
+
+        err = esp_partition_write(partition, offset, buffer, received);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "esp_partition_write failed: %s", esp_err_to_name(err));
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "WWW write failed");
+            return ESP_FAIL;
+        }
+
+        offset += received;
+        remaining -= received;
+    }
+
+    ESP_LOGI(TAG, "WWW update complete, rebooting in 1s");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"success\":true,\"message\":\"WWW update complete, rebooting\"}");
+
+    esp_timer_handle_t restart_timer;
+    const esp_timer_create_args_t restart_timer_args = {
+        .callback = ota_restart_callback,
+        .name = "ota_restart"
+    };
+    esp_timer_create(&restart_timer_args, &restart_timer);
+    esp_timer_start_once(restart_timer, 1000000); // 1 second
+
+    return ESP_OK;
+}
+
 static esp_err_t ota_update_handler(httpd_req_t *req) {
     if (check_auth(req) == ESP_FAIL) return ESP_FAIL;
 
@@ -976,6 +1039,7 @@ static httpd_handle_t web_server_start(void)
         register_uri_handler(server, "/um980/configure", HTTP_POST, um980_configure_handler);
         register_uri_handler(server, "/rtcm/record",     HTTP_GET,  rtcm_record_handler);
         register_uri_handler(server, "/ota/update",      HTTP_POST, ota_update_handler);
+        register_uri_handler(server, "/ota/www",         HTTP_POST, ota_www_handler);
 
         register_uri_handler(server, "/*", HTTP_GET, file_get_handler);
     }
