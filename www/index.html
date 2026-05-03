@@ -363,6 +363,24 @@
                             .appendText(" / ")
                             .append($('<span>', {class: 'text-' + wifiRssiColorClass(wifi.sta.rssi), text: wifi.sta.rssi + "dBm"}));
                     }
+
+                    // GNSS
+                    if (data.gnss) {
+                        $('.um980-firmware').val(data.gnss.firmware || 'Unknown');
+                        $('.um980-sats').val(data.gnss.satellites);
+
+                        let fixType = 'Unknown';
+                        switch(data.gnss.fix_quality) {
+                            case 0: fixType = 'No Fix'; break;
+                            case 1: fixType = 'GPS Fix'; break;
+                            case 2: fixType = 'DGPS Fix'; break;
+                            case 4: fixType = 'RTK Fixed'; break;
+                            case 5: fixType = 'RTK Float'; break;
+                        }
+                        $('.um980-fix').val(fixType + ' (' + data.gnss.fix_quality + ')');
+
+                        $('.um980-status').text(fixType + ' / ' + data.gnss.satellites + ' sats');
+                    }
                 }).always(function() {
                     setTimeout(statusUpdate, 2500);
                 });
@@ -841,7 +859,6 @@
                             UART (main communication)
                             <small class="uart-stats stream-stats" data-stream="uart"></small>
                             <div class="d-inline float-right">
-                                <button id="btn-um980-configure" class="btn btn-sm btn-warning mr-2">Configure UM980</button>
                                 <a href="javascript:void(0)" id="switch-uart">Configure</a>
                             </div>
                         </div>
@@ -954,6 +971,29 @@
                                     <input type="number" name="uart_cts_pin" data-disable-if="input[type='checkbox'][name='uart_fc_cts']" class="form-control" placeholder="19" value="19" required>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                    <div class="card mb-3 border border-warning">
+                        <div class="card-header">
+                            UM980 GNSS Receiver
+                            <small class="um980-status"></small>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-row mb-3">
+                                <div class="col-6">
+                                    <label>Firmware version</label>
+                                    <input type="text" class="form-control um980-firmware" readonly value="Unknown">
+                                </div>
+                                <div class="col-3">
+                                    <label>Satellites</label>
+                                    <input type="text" class="form-control um980-sats" readonly value="0">
+                                </div>
+                                <div class="col-3">
+                                    <label>Fix quality</label>
+                                    <input type="text" class="form-control um980-fix" readonly value="Unknown">
+                                </div>
+                            </div>
+                            <button type="button" id="btn-um980-configure" class="btn btn-warning">Configure UM980</button>
                         </div>
                     </div>
                 </div>

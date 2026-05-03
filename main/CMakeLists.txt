@@ -12,6 +12,7 @@ idf_component_register(SRCS "main.c"
 		"um980_config.c"
 		"web_server.c"
 		"wifi.c"
+		"gnss.c"
 		"interface/ntrip_server.c"
 		"interface/ntrip_server_2.c"
 

@@ -40,5 +40,6 @@ void stream_stats_values(stream_stats_handle_t stats, stream_stats_values_t *val
 
 stream_stats_handle_t stream_stats_first();
 stream_stats_handle_t stream_stats_next(stream_stats_handle_t stats);
+stream_stats_handle_t stream_stats_get(const char *name);
 
 #endif //ESP32_XBEE_STREAM_STATS_H

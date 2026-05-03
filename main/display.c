@@ -17,6 +17,8 @@
 #include <string.h>
 #include <stdio.h>
 
+#include "gnss.h"
+
 static const char *TAG = "DISPLAY";
 
 // ── SSD1306 constants ─────────────────────────────────────────────────────────
@@ -238,50 +240,72 @@ static void render(void) {
 
     char line[COLS + 1];
     char tmp[16];
+    char tmp2[16];
 
-    // ── Row 0: WiFi ──────────────────────────────────────────────────────────
+    // ── Row 0: WiFi + GNSS Sats ──────────────────────────────────────────────
     wifi_sta_status_t sta;
-    wifi_sta_status(& sta);
-    char row0[32];
+    wifi_sta_status(&sta);
+    gnss_status_t gnss;
+    gnss_get_status(&gnss);
+
     if (sta.active && sta.connected) {
-        // "W:192.168.1.100 -65dB"  (21 chars)
         esp_ip4addr_ntoa((const esp_ip4_addr_t *)&sta.ip4_addr, tmp, sizeof(tmp));
-        snprintf(row0, sizeof(row0), "W:%s %ddB", tmp, sta.rssi);
+        snprintf(line, sizeof(line), "W:%s S:%d", tmp, gnss.satellites);
     } else {
         wifi_ap_status_t ap;
         wifi_ap_status(&ap);
         if (ap.active) {
-            // "AP:192.168.4.1  2dev" (21 chars)
             esp_ip4addr_ntoa((const esp_ip4_addr_t *)&ap.ip4_addr, tmp, sizeof(tmp));
-            snprintf(row0, sizeof(row0), "AP:%s %ddev", tmp, ap.devices);
+            snprintf(line, sizeof(line), "AP:%s S:%d", tmp, gnss.satellites);
         } else {
-            snprintf(row0, sizeof(row0), "WiFi: no connection");
+            snprintf(line, sizeof(line), "No WiFi   S:%d", gnss.satellites);
         }
     }
-    fb_puts_padded(0, 0, COLS, row0);
+    fb_puts_padded(0, 0, COLS, line);
 
-    // ── Rows 1–2: NTRIP server stats ─────────────────────────────────────────
-    stream_stats_handle_t st = stream_stats_first();
-    for (int row = 1; row <= 2; row++) {
-        if (st) {
-            stream_stats_values_t v;
-            stream_stats_values(st, &v);
-            fmt_rate(tmp, sizeof(tmp), v.rate_out);
-            snprintf(line, sizeof(line), "N%d: %s", row, tmp);
-            st = stream_stats_next(st);
-        } else {
-            snprintf(line, sizeof(line), "N%d: --", row);
-        }
-        fb_puts_padded(row, 0, COLS, line);
+    // ── Row 1: GNSS Fix Quality ──────────────────────────────────────────────
+    const char *fix_str = "No Fix";
+    switch (gnss.fix_quality) {
+        case 1: fix_str = "GPS Fix"; break;
+        case 2: fix_str = "DGPS Fix"; break;
+        case 4: fix_str = "RTK Fixed"; break;
+        case 5: fix_str = "RTK Float"; break;
     }
+    snprintf(line, sizeof(line), "GNSS: %s", fix_str);
+    fb_puts_padded(1, 0, COLS, line);
+
+    // ── Row 2: NTRIP Rates ───────────────────────────────────────────────────
+    stream_stats_handle_t s1 = stream_stats_get("ntrip_server");
+    stream_stats_handle_t s2 = stream_stats_get("ntrip_server_2");
+    stream_stats_handle_t sc = stream_stats_get("ntrip_client");
+
+    uint32_t r1 = 0, r2 = 0, rc = 0;
+    if (s1) { stream_stats_values_t v; stream_stats_values(s1, &v); r1 = v.rate_out; }
+    if (s2) { stream_stats_values_t v; stream_stats_values(s2, &v); r2 = v.rate_out; }
+    if (sc) { stream_stats_values_t v; stream_stats_values(sc, &v); rc = v.rate_in; }
+
+    if (sc && (r1 || r2)) {
+        fmt_rate(tmp, sizeof(tmp), rc);
+        fmt_rate(tmp2, sizeof(tmp2), r1 + r2);
+        snprintf(line, sizeof(line), "C:%s S:%s", tmp, tmp2);
+    } else if (r1 || r2) {
+        fmt_rate(tmp, sizeof(tmp), r1);
+        fmt_rate(tmp2, sizeof(tmp2), r2);
+        snprintf(line, sizeof(line), "N1:%s N2:%s", tmp, tmp2);
+    } else if (sc) {
+        fmt_rate(tmp, sizeof(tmp), rc);
+        snprintf(line, sizeof(line), "Client: %s", tmp);
+    } else {
+        snprintf(line, sizeof(line), "NTRIP: idle");
+    }
+    fb_puts_padded(2, 0, COLS, line);
 
     // ── Row 3: uptime + heap ─────────────────────────────────────────────────
     uint32_t uptime_s = (uint32_t)(esp_timer_get_time() / 1000000ULL);
     uint32_t heap_k   = esp_get_free_heap_size() / 1024;
     fmt_uptime(tmp, sizeof(tmp), uptime_s);
-    char row3[40];
-    snprintf(row3, sizeof(row3), "Up:%-8s Heap:%3uk", tmp, (unsigned)heap_k);
-    fb_puts_padded(3, 0, COLS, row3);
+    snprintf(line, sizeof(line), "Up:%-8s Heap:%3uk", tmp, (unsigned)heap_k);
+    fb_puts_padded(3, 0, COLS, line);
 }
 
 // ── Display task ──────────────────────────────────────────────────────────────

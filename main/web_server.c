@@ -34,6 +34,7 @@
 #include <esp_rom_crc.h>
 #include <lwip/sockets.h>
 #include <esp_timer.h>
+#include <gnss.h>
 #include "web_server.h"
 #include "uart.h"
 #include "um980_config.h"
@@ -710,6 +711,14 @@ static esp_err_t status_get_handler(httpd_req_t *req) {
             cJSON_AddStringToObject(sta, "ip6", ip);
         }
     }
+
+    // GNSS
+    gnss_status_t gnss_status;
+    gnss_get_status(&gnss_status);
+    cJSON *gnss = cJSON_AddObjectToObject(root, "gnss");
+    cJSON_AddNumberToObject(gnss, "satellites", gnss_status.satellites);
+    cJSON_AddNumberToObject(gnss, "fix_quality", gnss_status.fix_quality);
+    cJSON_AddStringToObject(gnss, "firmware", gnss_status.firmware_version);
 
     return json_response(req, root);
 }

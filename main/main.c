@@ -19,6 +19,7 @@
 #include <log.h>
 #include <status_led.h>
 #include <display.h>
+#include <gnss.h>
 
 #include <esp_sntp.h>
 #include <core_dump.h>
@@ -84,6 +85,7 @@ void app_main()
 
     config_init();
     uart_init();
+    gnss_init();
 
     // UM980 base station configuration is done on demand via the web UI
     // (POST /um980/configure), not at every boot. This avoids re-triggering a

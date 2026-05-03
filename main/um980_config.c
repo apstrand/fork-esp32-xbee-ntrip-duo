@@ -44,6 +44,7 @@ static const struct {
     {"\r\nRTCM1127 1\r\n",             100},
     {"\r\nRTCM1137 1\r\n",             100},
     {"\r\nRTCM1230 10\r\n",            100},
+    {"\r\nVERSION\r\n",               200},
     {"\r\nSAVECONFIG\r\n",             200},
 };
 
