@@ -993,6 +993,17 @@
                                     <input type="text" class="form-control um980-fix" readonly value="Unknown">
                                 </div>
                             </div>
+                            <div class="form-row mb-3">
+                                <div class="col-4">
+                                    <label>Antenna height <small class="text-muted" data-toggle="tooltip" title="Height of the antenna phase centre above the ground marker, in metres. Used in RTCM 1006 and CONFIG ANTHEIGHT. Applied next time 'Configure UM980' is pressed.">?</small></label>
+                                    <div class="input-group">
+                                        <input type="number" name="um980_anth" class="form-control" min="0" max="100" step="0.001" value="0.000" required>
+                                        <div class="input-group-append">
+                                            <span class="input-group-text">m</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                             <button type="button" id="btn-um980-configure" class="btn btn-warning">Configure UM980</button>
                         </div>
                     </div>

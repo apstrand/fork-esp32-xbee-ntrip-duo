@@ -56,6 +56,13 @@ const config_item_t CONFIG_ITEMS[] = {
                 .def.str = CONFIG_DEFAULT_MDNS_NAME
         },
 
+        // UM980
+        {
+                .key = KEY_CONFIG_UM980_ANTHEIGHT,
+                .type = CONFIG_ITEM_TYPE_STRING,
+                .def.str = "0.000"
+        },
+
         // Bluetooth
         {
                 .key = KEY_CONFIG_BLUETOOTH_ACTIVE,

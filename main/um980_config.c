@@ -1,6 +1,9 @@
 #include "um980_config.h"
 #include "uart.h"
+#include "config.h"
 #include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <esp_log.h>
@@ -36,7 +39,7 @@ static const struct {
     {"\r\nUNLOGALL\r\n",                  200},
     {"\r\nCONFIG SIGNALGROUP 2\r\n",      200},
     {"\r\nMODE BASE TIME 600 1.5\r\n",    200},
-    {"\r\nCONFIG ANTHEIGHT 0.0\r\n",      100},
+    {NULL,                                100},  // CONFIG ANTHEIGHT — built at runtime from NVS
     {"\r\nRTCM1006 5\r\n",                100},
     {"\r\nRTCM1077 1\r\n",                100},
     {"\r\nRTCM1087 1\r\n",                100},
@@ -49,9 +52,19 @@ static const struct {
 };
 
 void um980_configure_base_station(void) {
-    ESP_LOGI(TAG, "Sending base station configuration");
+    char antheight_str[32];
+    size_t len = sizeof(antheight_str) - 1;
+    config_get_str_blob(CONF_ITEM(KEY_CONFIG_UM980_ANTHEIGHT), antheight_str, &len);
+    antheight_str[len] = '\0';
+    float height = strtof(antheight_str, NULL);
+
+    char antheight_cmd[48];
+    snprintf(antheight_cmd, sizeof(antheight_cmd), "\r\nCONFIG ANTHEIGHT %.3f\r\n", height);
+
+    ESP_LOGI(TAG, "Sending base station configuration (antenna height %.3f m)", height);
     for (int i = 0; i < sizeof(um980_config_cmds) / sizeof(um980_config_cmds[0]); i++) {
         const char *cmd = um980_config_cmds[i].cmd;
+        if (cmd == NULL) cmd = antheight_cmd;
         uart_write((char *)cmd, strlen(cmd));
         vTaskDelay(pdMS_TO_TICKS(um980_config_cmds[i].delay_ms));
     }
